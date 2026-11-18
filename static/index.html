@@ -464,7 +464,7 @@ async function startJob() {
   const url = document.getElementById('url-input').value.trim();
   if (!url) { showError('Colle une URL YouTube valide.'); return; }
   if (!url.includes('youtube') && !url.includes('youtu.be')) {
-    showError('Seules les URLs YouTube sont supportées pour l'instant.');
+    showError("Seules les URLs YouTube sont supportées pour l'instant.");
     return;
   }
   hideError();
