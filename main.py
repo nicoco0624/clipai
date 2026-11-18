@@ -28,7 +28,16 @@ STATIC_DIR  = BASE_DIR / "static"
 CLIPS_DIR.mkdir(exist_ok=True)
 UPLOADS_DIR.mkdir(exist_ok=True)
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
+# Cookies YouTube encodés en base64 (variable YOUTUBE_COOKIES_B64 sur Render)
+_COOKIES_B64       = os.getenv("YOUTUBE_COOKIES_B64", "")
+COOKIES_PATH       = Path("/tmp/yt_cookies.txt")
+
+if _COOKIES_B64:
+    import base64
+    COOKIES_PATH.write_bytes(base64.b64decode(_COOKIES_B64))
+    print(f"✓  Cookies YouTube chargés ({COOKIES_PATH.stat().st_size} octets)")
+
 MODEL_OPUS   = "claude-opus-5-5"       # analyse profonde
 MODEL_SONNET = "claude-sonnet-4-6"     # exécution rapide
 
@@ -159,7 +168,6 @@ async def process_video(job_id: str, url: str, language: str):
 
 def download_video(url: str, out_dir: Path) -> Path:
     out_path = out_dir / "source.mp4"
-    # tv_embedded + android contournent la détection bot de YouTube sur serveur
     ydl_opts = {
         "format":    "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]/best",
         "outtmpl":   str(out_path),
@@ -167,16 +175,8 @@ def download_video(url: str, out_dir: Path) -> Path:
         "merge_output_format": "mp4",
         "extractor_args": {
             "youtube": {
-                "player_client": ["tv_embedded", "android"],
-                "player_skip":   ["webpage", "js"],
+                "player_client": ["tv_embedded", "android", "web"],
             }
-        },
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Linux; Android 11; Pixel 5) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/90.0.4430.91 Mobile Safari/537.36"
-            )
         },
         "socket_timeout": 60,
         "postprocessors": [{
@@ -184,6 +184,9 @@ def download_video(url: str, out_dir: Path) -> Path:
             "preferedformat": "mp4",
         }],
     }
+    # Cookies = seul moyen fiable sur IP cloud bloquée par YouTube
+    if COOKIES_PATH.exists() and COOKIES_PATH.stat().st_size > 100:
+        ydl_opts["cookiefile"] = str(COOKIES_PATH)
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
     candidates = list(out_dir.glob("source*.mp4"))
