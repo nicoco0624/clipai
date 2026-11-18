@@ -5,9 +5,24 @@ IA      : Claude Opus 5.5 (analyse) + Claude Sonnet 4.6 (exécution)
 Video   : yt-dlp + ffmpeg + faster-whisper
 """
 
-import os, json, uuid, asyncio, shutil, re, math
+import os, json, uuid, asyncio, shutil, re, math, urllib.request
 from pathlib import Path
 from typing import Optional
+
+# Instances Invidious publiques (proxy YouTube sans détection bot)
+INVIDIOUS_INSTANCES = [
+    "yewtu.be",
+    "inv.nadeko.net",
+    "invidious.nerdvpn.de",
+    "iv.melmac.space",
+    "invidious.privacydev.net",
+]
+
+def _extract_video_id(url: str) -> str:
+    m = re.search(r'(?:v=|youtu\.be/|embed/|shorts/)([a-zA-Z0-9_-]{11})', url)
+    if not m:
+        raise ValueError(f"URL YouTube invalide : {url}")
+    return m.group(1)
 
 import anthropic
 import yt_dlp
@@ -166,33 +181,56 @@ async def process_video(job_id: str, url: str, language: str):
 
 # ── Téléchargement ────────────────────────────────────────────────────────
 
-def download_video(url: str, out_dir: Path) -> Path:
-    out_path = out_dir / "source.mp4"
-    ydl_opts = {
+def _ydl_download(source_url: str, out_path: Path, cookies: bool = False) -> bool:
+    """Tente un téléchargement yt-dlp. Retourne True si réussi."""
+    opts = {
         "format":    "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]/best",
         "outtmpl":   str(out_path),
         "quiet":     True,
+        "no_warnings": True,
         "merge_output_format": "mp4",
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["tv_embedded", "android", "web"],
-            }
-        },
-        "socket_timeout": 60,
-        "postprocessors": [{
-            "key":            "FFmpegVideoConvertor",
-            "preferedformat": "mp4",
-        }],
+        "socket_timeout": 45,
+        "postprocessors": [{"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}],
     }
-    # Cookies = seul moyen fiable sur IP cloud bloquée par YouTube
-    if COOKIES_PATH.exists() and COOKIES_PATH.stat().st_size > 100:
-        ydl_opts["cookiefile"] = str(COOKIES_PATH)
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-    candidates = list(out_dir.glob("source*.mp4"))
-    if not candidates:
-        raise RuntimeError("Téléchargement échoué — YouTube a bloqué la requête")
-    return candidates[0]
+    if cookies and COOKIES_PATH.exists() and COOKIES_PATH.stat().st_size > 100:
+        opts["cookiefile"] = str(COOKIES_PATH)
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([source_url])
+        return bool(list(out_path.parent.glob("source*.mp4")))
+    except Exception as e:
+        print(f"  yt-dlp échoué sur {source_url}: {e}")
+        # nettoyer fichier partiel
+        for f in out_path.parent.glob("source*"):
+            f.unlink(missing_ok=True)
+        return False
+
+def download_video(url: str, out_dir: Path) -> Path:
+    out_path = out_dir / "source.mp4"
+    video_id = _extract_video_id(url)
+
+    # 1. Essayer chaque instance Invidious (proxy sans bot-check)
+    for host in INVIDIOUS_INSTANCES:
+        inv_url = f"https://{host}/watch?v={video_id}"
+        print(f"→ Essai Invidious : {host}")
+        if _ydl_download(inv_url, out_path):
+            candidates = list(out_dir.glob("source*.mp4"))
+            if candidates:
+                print(f"✓ Téléchargé via {host}")
+                return candidates[0]
+
+    # 2. Fallback direct YouTube avec cookies si disponibles
+    print("→ Fallback direct YouTube")
+    if _ydl_download(url, out_path, cookies=True):
+        candidates = list(out_dir.glob("source*.mp4"))
+        if candidates:
+            return candidates[0]
+
+    raise RuntimeError(
+        "Impossible de télécharger la vidéo. "
+        "YouTube bloque les IP cloud. "
+        "Essaie une autre vidéo ou contacte le support."
+    )
 
 # ── Transcription ─────────────────────────────────────────────────────────
 
