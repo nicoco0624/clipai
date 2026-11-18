@@ -1,0 +1,627 @@
+<title>ClipAI</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500&display=swap">
+
+<style>
+/* ── Tokens ──────────────────────────────────────────────────────────── */
+/* Layout: single-page app, three stages stacked, only one visible */
+:root {
+  --bg:        #08080E;
+  --bg-card:   #111118;
+  --bg-input:  #16161F;
+  --border:    rgba(255,255,255,.08);
+  --fg:        #E8E8F0;
+  --fg-muted:  #7A7A96;
+  --accent:    #7C5CFC;
+  --accent-hi: #9D82FF;
+  --accent-glow: rgba(124,92,252,.35);
+  --success:   #22C55E;
+  --warn:      #F59E0B;
+  --radius:    14px;
+  --font-head: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:       #F4F4FA;
+    --bg-card:  #FFFFFF;
+    --bg-input: #EEEEF5;
+    --border:   rgba(0,0,0,.08);
+    --fg:       #12121A;
+    --fg-muted: #6B6B88;
+    --accent:   #6448E8;
+    --accent-hi:#7C5CFC;
+    --accent-glow: rgba(100,72,232,.2);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg:#F4F4FA; --bg-card:#FFFFFF; --bg-input:#EEEEF5;
+  --border:rgba(0,0,0,.08); --fg:#12121A; --fg-muted:#6B6B88;
+  --accent:#6448E8; --accent-hi:#7C5CFC; --accent-glow:rgba(100,72,232,.2);
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  padding-left:  max(16px, env(safe-area-inset-left,  0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+  overflow-x: hidden;
+}
+
+/* ── App shell ───────────────────────────────────────────────────────── */
+.app { min-height: 100%; display: flex; flex-direction: column }
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+.logo {
+  font-family: var(--font-head); font-weight: 700; font-size: 1.25rem;
+  letter-spacing: -.02em; color: var(--fg);
+  display: flex; align-items: center; gap: 8px;
+}
+.logo-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.badge {
+  font-size: 11px; font-weight: 500; letter-spacing: .04em;
+  padding: 3px 8px; border-radius: 20px;
+  background: var(--accent-glow); color: var(--accent-hi);
+  border: 1px solid rgba(124,92,252,.3);
+}
+
+/* ── Stages ──────────────────────────────────────────────────────────── */
+.stage { display: none; flex-direction: column; flex: 1 }
+.stage.active { display: flex }
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+.hero {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 48px 0 60px; text-align: center; gap: 32px;
+}
+.hero-eyebrow {
+  font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent-hi); display: flex; align-items: center; gap: 6px;
+}
+.hero-eyebrow::before, .hero-eyebrow::after {
+  content: ''; flex: 1; max-width: 32px; height: 1px; background: var(--accent-glow);
+}
+h1 {
+  font-family: var(--font-head); font-weight: 700;
+  font-size: clamp(2rem, 6vw, 3.5rem); line-height: 1.1;
+  letter-spacing: -.03em; text-wrap: balance;
+  max-width: 640px;
+}
+h1 em { font-style: normal; color: var(--accent-hi) }
+.hero-sub {
+  color: var(--fg-muted); font-size: 1rem; max-width: 440px; text-wrap: balance;
+}
+
+/* ── Input box ───────────────────────────────────────────────────────── */
+.input-box {
+  width: 100%; max-width: 580px;
+  background: var(--bg-input); border: 1.5px solid var(--border);
+  border-radius: var(--radius); padding: 6px 6px 6px 18px;
+  display: flex; gap: 8px; align-items: center;
+  transition: border-color .2s;
+}
+.input-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.input-box input {
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
+  font-family: var(--font-body); font-size: .95rem; color: var(--fg);
+}
+.input-box input::placeholder { color: var(--fg-muted) }
+.btn-primary {
+  flex-shrink: 0;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: calc(var(--radius) - 4px);
+  padding: 10px 20px; font-family: var(--font-head);
+  font-size: .9rem; font-weight: 600; cursor: pointer;
+  transition: background .15s, transform .1s, box-shadow .15s;
+  white-space: nowrap;
+}
+.btn-primary:hover { background: var(--accent-hi); box-shadow: 0 4px 16px var(--accent-glow) }
+.btn-primary:active { transform: scale(.97) }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none }
+
+.hero-features {
+  display: flex; flex-wrap: wrap; gap: 10px 20px;
+  justify-content: center;
+  font-size: .82rem; color: var(--fg-muted);
+}
+.hero-features span::before { content: '✦ '; color: var(--accent); font-size: .7rem }
+
+/* ── Progress stage ──────────────────────────────────────────────────── */
+.progress-wrap {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 32px; padding: 48px 0;
+}
+.progress-title {
+  font-family: var(--font-head); font-weight: 600; font-size: 1.3rem;
+  text-align: center; text-wrap: balance; max-width: 400px;
+}
+.progress-step {
+  font-size: .9rem; color: var(--accent-hi); min-height: 1.4em;
+  text-align: center;
+}
+.progress-bar-wrap {
+  width: 100%; max-width: 440px;
+  background: var(--bg-input); border-radius: 99px;
+  height: 6px; overflow: hidden;
+}
+.progress-bar {
+  height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+  transition: width .4s ease;
+  box-shadow: 0 0 10px var(--accent-glow);
+  width: 0%;
+}
+.progress-models {
+  display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+}
+.model-pill {
+  font-size: .78rem; padding: 4px 10px; border-radius: 20px;
+  border: 1px solid var(--border); color: var(--fg-muted);
+  display: flex; align-items: center; gap: 5px;
+}
+.model-pill .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--success);
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+/* ── Results stage ───────────────────────────────────────────────────── */
+.results-header {
+  padding: 28px 0 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap;
+}
+.results-header h2 {
+  font-family: var(--font-head); font-weight: 700; font-size: 1.4rem;
+  letter-spacing: -.02em;
+}
+.results-meta { font-size: .85rem; color: var(--fg-muted) }
+.btn-ghost {
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 14px; color: var(--fg); font-family: var(--font-body);
+  font-size: .85rem; cursor: pointer; transition: border-color .15s;
+  white-space: nowrap;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent-hi) }
+
+/* ── Clips grid ──────────────────────────────────────────────────────── */
+.clips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px; padding-bottom: 48px;
+}
+
+/* ── Clip card ───────────────────────────────────────────────────────── */
+.clip-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+  transition: border-color .2s, transform .2s, box-shadow .2s;
+  display: flex; flex-direction: column;
+}
+.clip-card:hover {
+  border-color: rgba(124,92,252,.4);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(0,0,0,.3);
+}
+.clip-thumb {
+  aspect-ratio: 9/16; background: #0D0D18;
+  position: relative; overflow: hidden; cursor: pointer;
+}
+.clip-thumb img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform .3s;
+}
+.clip-card:hover .clip-thumb img { transform: scale(1.03) }
+.clip-thumb-placeholder {
+  width: 100%; height: 100%; display: flex; align-items: center;
+  justify-content: center; color: var(--fg-muted);
+  font-size: 2rem;
+}
+.clip-play {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  background: rgba(0,0,0,.35); opacity: 0; transition: opacity .2s;
+}
+.clip-card:hover .clip-play { opacity: 1 }
+.play-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--accent); display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px var(--accent-glow);
+}
+.play-btn svg { fill: #fff; margin-left: 3px }
+.clip-score {
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(0,0,0,.7); border: 1px solid var(--accent-glow);
+  color: var(--accent-hi); font-size: .72rem; font-weight: 600;
+  padding: 2px 7px; border-radius: 20px; font-variant-numeric: tabular-nums;
+}
+.clip-duration {
+  position: absolute; bottom: 8px; right: 8px;
+  background: rgba(0,0,0,.8); color: #fff;
+  font-size: .72rem; padding: 2px 6px; border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.clip-info { padding: 14px; display: flex; flex-direction: column; gap: 8px; flex: 1 }
+.clip-hook {
+  font-size: .72rem; font-weight: 700; letter-spacing: .06em;
+  color: var(--accent-hi); text-transform: uppercase; line-height: 1.3;
+}
+.clip-title {
+  font-family: var(--font-head); font-weight: 600; font-size: .95rem;
+  line-height: 1.35; color: var(--fg);
+}
+.clip-hashtags {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px;
+}
+.clip-hashtags span {
+  font-size: .72rem; color: var(--accent-hi);
+  background: rgba(124,92,252,.1); padding: 2px 7px;
+  border-radius: 20px;
+}
+.clip-actions {
+  display: flex; gap: 8px; padding: 0 14px 14px;
+}
+.clip-actions a, .clip-actions button {
+  flex: 1; text-align: center; padding: 8px;
+  border-radius: 8px; font-size: .82rem; font-weight: 500;
+  text-decoration: none; cursor: pointer; transition: background .15s;
+}
+.btn-preview {
+  background: var(--bg-input); color: var(--fg); border: none;
+}
+.btn-preview:hover { background: var(--border) }
+.btn-download {
+  background: var(--accent); color: #fff;
+  border: none;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+.btn-download:hover { background: var(--accent-hi) }
+
+/* ── Video modal ─────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 20px;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all }
+.modal-box {
+  position: relative; max-width: 360px; width: 100%;
+  transform: scale(.95); transition: transform .2s;
+}
+.modal-overlay.open .modal-box { transform: scale(1) }
+.modal-box video {
+  width: 100%; border-radius: 12px; display: block;
+  background: #000;
+}
+.modal-close {
+  position: absolute; top: -40px; right: 0;
+  background: none; border: none; color: #fff;
+  font-size: 1.5rem; cursor: pointer; padding: 4px;
+  line-height: 1;
+}
+
+/* ── Error banner ────────────────────────────────────────────────────── */
+.error-banner {
+  background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3);
+  color: #FCA5A5; border-radius: 10px; padding: 12px 16px;
+  font-size: .88rem; display: none; margin: 16px 0;
+}
+.error-banner.show { display: block }
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 520px) {
+  h1 { font-size: 2rem }
+  .clips-grid { grid-template-columns: 1fr 1fr }
+}
+@media (max-width: 360px) {
+  .clips-grid { grid-template-columns: 1fr }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important }
+}
+</style>
+
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <span class="logo-dot"></span>
+      ClipAI
+    </div>
+    <span class="badge">Opus 5.5 + Sonnet 4.6</span>
+  </header>
+
+  <!-- ── Stage 1 : Input ─────────────────────────────────────────────── -->
+  <div class="stage active" id="stage-input">
+    <div class="hero">
+      <div class="hero-eyebrow">IA générative de clips viraux</div>
+      <h1>Transforme une vidéo en <em>clips viraux</em> en quelques minutes</h1>
+      <p class="hero-sub">
+        Colle n'importe quelle URL YouTube. L'IA identifie les meilleurs moments,
+        découpe, sous-titre et formate pour TikTok, Reels et Shorts.
+      </p>
+
+      <div class="input-box">
+        <input id="url-input" type="url"
+               placeholder="https://www.youtube.com/watch?v=..."
+               autocomplete="off" spellcheck="false">
+        <button class="btn-primary" id="btn-start" onclick="startJob()">
+          Générer les clips →
+        </button>
+      </div>
+
+      <div id="error-banner" class="error-banner"></div>
+
+      <div class="hero-features">
+        <span>Transcription Whisper</span>
+        <span>Analyse Claude Opus</span>
+        <span>Sous-titres auto</span>
+        <span>Format 9:16</span>
+        <span>Téléchargement direct</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stage 2 : Progress ──────────────────────────────────────────── -->
+  <div class="stage" id="stage-progress">
+    <div class="progress-wrap">
+      <div class="progress-title" id="progress-title">Analyse en cours…</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <div class="progress-step" id="progress-step">Initialisation…</div>
+      <div class="progress-models">
+        <div class="model-pill"><span class="dot"></span> Claude Opus 5.5 — analyse</div>
+        <div class="model-pill"><span class="dot"></span> Claude Sonnet 4.6 — tâches</div>
+        <div class="model-pill"><span class="dot"></span> Whisper — transcription</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stage 3 : Results ───────────────────────────────────────────── -->
+  <div class="stage" id="stage-results">
+    <div class="results-header">
+      <div>
+        <h2 id="results-title">Clips prêts</h2>
+        <div class="results-meta" id="results-meta"></div>
+      </div>
+      <button class="btn-ghost" onclick="reset()">← Nouvelle vidéo</button>
+    </div>
+    <div class="clips-grid" id="clips-grid"></div>
+  </div>
+
+</div>
+
+<!-- ── Video modal ──────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <video id="modal-video" controls playsinline></video>
+  </div>
+</div>
+
+<script>
+const API = '';   // même origine
+let jobId   = null;
+let pollTimer = null;
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+function showStage(id) {
+  document.querySelectorAll('.stage').forEach(s => s.classList.remove('active'));
+  document.getElementById('stage-' + id).classList.add('active');
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function hideError() {
+  document.getElementById('error-banner').classList.remove('show');
+}
+
+function fmtDuration(secs) {
+  const m = Math.floor(secs / 60);
+  const s = Math.round(secs % 60);
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+// ── Start ────────────────────────────────────────────────────────────────
+
+async function startJob() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { showError('Colle une URL YouTube valide.'); return; }
+  if (!url.includes('youtube') && !url.includes('youtu.be')) {
+    showError('Seules les URLs YouTube sont supportées pour l'instant.');
+    return;
+  }
+  hideError();
+  document.getElementById('btn-start').disabled = true;
+
+  try {
+    const res = await fetch('/api/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ url, language: 'fr' })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || `Erreur ${res.status}`);
+    }
+    const data = await res.json();
+    jobId = data.job_id;
+    showStage('progress');
+    document.getElementById('progress-title').textContent =
+      'Analyse de la vidéo en cours…';
+    pollStatus();
+  } catch (e) {
+    document.getElementById('btn-start').disabled = false;
+    showError('Erreur : ' + e.message);
+  }
+}
+
+// ── Enter key submit ─────────────────────────────────────────────────────
+document.getElementById('url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') startJob();
+});
+
+// Paste auto-submit
+document.getElementById('url-input').addEventListener('paste', () => {
+  setTimeout(() => {
+    const v = document.getElementById('url-input').value.trim();
+    if (v.includes('youtube') || v.includes('youtu.be')) startJob();
+  }, 50);
+});
+
+// ── Polling ──────────────────────────────────────────────────────────────
+
+function pollStatus() {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = setTimeout(async () => {
+    try {
+      const res  = await fetch(`/api/status/${jobId}`);
+      const data = await res.json();
+      updateProgress(data);
+      if (data.status === 'running' || data.status === 'pending') {
+        pollStatus();
+      }
+    } catch (e) {
+      pollStatus();  // retry on network error
+    }
+  }, 1500);
+}
+
+function updateProgress(data) {
+  const pct = data.progress || 0;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-step').textContent = data.step || '';
+
+  if (data.status === 'done') {
+    clearTimeout(pollTimer);
+    showResults(data);
+  } else if (data.status === 'error') {
+    clearTimeout(pollTimer);
+    showStage('input');
+    document.getElementById('btn-start').disabled = false;
+    showError('Erreur : ' + (data.error || 'inconnue'));
+  }
+}
+
+// ── Results ──────────────────────────────────────────────────────────────
+
+function showResults(data) {
+  const clips = data.clips || [];
+  document.getElementById('results-title').textContent =
+    `${clips.length} clip${clips.length > 1 ? 's' : ''} prêt${clips.length > 1 ? 's' : ''}`;
+  document.getElementById('results-meta').textContent =
+    `Générés depuis ${data.url || 'la vidéo'}`;
+
+  const grid = document.getElementById('clips-grid');
+  grid.innerHTML = '';
+
+  clips.forEach((clip, i) => {
+    const dur    = fmtDuration(clip.duration || 0);
+    const score  = clip.score || '?';
+    const tags   = (clip.hashtags || []).slice(0, 4)
+      .map(t => `<span>${t}</span>`).join('');
+    const thumb  = clip.thumbnail
+      ? `<img src="${clip.thumbnail}" alt="" loading="lazy">`
+      : `<div class="clip-thumb-placeholder">🎬</div>`;
+
+    const card = document.createElement('div');
+    card.className = 'clip-card';
+    card.innerHTML = `
+      <div class="clip-thumb" onclick="previewClip('${clip.url}')">
+        ${thumb}
+        <div class="clip-play">
+          <div class="play-btn">
+            <svg width="16" height="18" viewBox="0 0 16 18">
+              <path d="M1 1l14 8L1 17V1z"/>
+            </svg>
+          </div>
+        </div>
+        <div class="clip-score">⚡ ${score}/10</div>
+        <div class="clip-duration">${dur}</div>
+      </div>
+      <div class="clip-info">
+        <div class="clip-hook">${clip.hook || ''}</div>
+        <div class="clip-title">${clip.title || `Clip ${i+1}`}</div>
+        ${tags ? `<div class="clip-hashtags">${tags}</div>` : ''}
+      </div>
+      <div class="clip-actions">
+        <button class="btn-preview" onclick="previewClip('${clip.url}')">▶ Aperçu</button>
+        <a class="btn-download" href="${clip.download}" target="_blank">⬇ Télécharger</a>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  showStage('results');
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────
+
+function previewClip(url) {
+  const video = document.getElementById('modal-video');
+  video.src   = url;
+  video.play().catch(() => {});
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal')) return;
+  const video = document.getElementById('modal-video');
+  video.pause();
+  video.src = '';
+  document.getElementById('modal').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ── Reset ────────────────────────────────────────────────────────────────
+
+function reset() {
+  clearTimeout(pollTimer);
+  jobId = null;
+  document.getElementById('url-input').value = '';
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('progress-bar').style.width = '0';
+  document.getElementById('clips-grid').innerHTML = '';
+  hideError();
+  showStage('input');
+}
+</script>
