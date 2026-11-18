@@ -5,24 +5,97 @@ IA      : Claude Opus 5.5 (analyse) + Claude Sonnet 4.6 (exécution)
 Video   : yt-dlp + ffmpeg + faster-whisper
 """
 
-import os, json, uuid, asyncio, shutil, re, math, urllib.request
+import os, json, uuid, asyncio, shutil, re, math, urllib.request, urllib.error
 from pathlib import Path
 from typing import Optional
 
-# Instances Invidious publiques (proxy YouTube sans détection bot)
+# Instances Invidious publiques — API proxifiée (local=true)
 INVIDIOUS_INSTANCES = [
     "yewtu.be",
     "inv.nadeko.net",
-    "invidious.nerdvpn.de",
     "iv.melmac.space",
     "invidious.privacydev.net",
+    "invidious.nerdvpn.de",
+    "vid.puffyan.us",
+    "invidious.flokinet.to",
 ]
+
+_REQ_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 def _extract_video_id(url: str) -> str:
     m = re.search(r'(?:v=|youtu\.be/|embed/|shorts/)([a-zA-Z0-9_-]{11})', url)
     if not m:
         raise ValueError(f"URL YouTube invalide : {url}")
     return m.group(1)
+
+
+def _download_url_to_file(stream_url: str, dest: Path, timeout: int = 120) -> bool:
+    """Télécharge un flux HTTP directement vers un fichier."""
+    req = urllib.request.Request(stream_url, headers=_REQ_HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp, open(dest, "wb") as f:
+            while True:
+                chunk = resp.read(1024 * 512)
+                if not chunk:
+                    break
+                f.write(chunk)
+        return dest.exists() and dest.stat().st_size > 500_000
+    except Exception as e:
+        print(f"  téléchargement échoué : {e}")
+        dest.unlink(missing_ok=True)
+        return False
+
+
+def _invidious_api_download(video_id: str, out_path: Path) -> bool:
+    """
+    Appelle l'API Invidious avec local=true :
+    les URLs retournées sont proxifiées via le serveur Invidious,
+    contournant le blocage IP de YouTube sur cloud.
+    """
+    for host in INVIDIOUS_INSTANCES:
+        try:
+            api = f"https://{host}/api/v1/videos/{video_id}?local=true&fields=formatStreams,adaptiveFormats,title"
+            print(f"  → API Invidious : {host}")
+            req = urllib.request.Request(api, headers=_REQ_HEADERS)
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read())
+
+            # formatStreams = vidéo+audio combinés (jusqu'à 720p), idéal
+            streams = data.get("formatStreams", [])
+            # Trier par résolution décroissante, garder ≤ 720p
+            def _height(s):
+                size = s.get("size", "0x0")
+                try:
+                    return int(size.split("x")[1])
+                except Exception:
+                    return 0
+
+            streams = [s for s in streams if _height(s) <= 720]
+            streams.sort(key=_height, reverse=True)
+
+            if not streams:
+                print(f"    aucun flux disponible sur {host}")
+                continue
+
+            best = streams[0]
+            stream_url = best.get("url", "")
+            if not stream_url:
+                continue
+
+            print(f"    flux : {best.get('qualityLabel','?')} — {stream_url[:60]}…")
+            if _download_url_to_file(stream_url, out_path):
+                print(f"  ✓ téléchargé via {host}")
+                return True
+
+        except urllib.error.HTTPError as e:
+            print(f"  {host} HTTP {e.code}")
+        except Exception as e:
+            print(f"  {host} erreur : {e}")
+
+    return False
 
 import anthropic
 import yt_dlp
@@ -200,26 +273,30 @@ def _ydl_download(source_url: str, out_path: Path, cookies: bool = False) -> boo
         return bool(list(out_path.parent.glob("source*.mp4")))
     except Exception as e:
         print(f"  yt-dlp échoué sur {source_url}: {e}")
-        # nettoyer fichier partiel
         for f in out_path.parent.glob("source*"):
             f.unlink(missing_ok=True)
         return False
+
 
 def download_video(url: str, out_dir: Path) -> Path:
     out_path = out_dir / "source.mp4"
     video_id = _extract_video_id(url)
 
-    # 1. Essayer chaque instance Invidious (proxy sans bot-check)
-    for host in INVIDIOUS_INSTANCES:
+    # 1. API Invidious avec proxy local=true (stream passe via leur serveur)
+    print("→ Tentative API Invidious (proxy local)")
+    if _invidious_api_download(video_id, out_path):
+        return out_path
+
+    # 2. yt-dlp via URL Invidious (fallback)
+    for host in INVIDIOUS_INSTANCES[:3]:
         inv_url = f"https://{host}/watch?v={video_id}"
-        print(f"→ Essai Invidious : {host}")
+        print(f"→ yt-dlp Invidious : {host}")
         if _ydl_download(inv_url, out_path):
             candidates = list(out_dir.glob("source*.mp4"))
             if candidates:
-                print(f"✓ Téléchargé via {host}")
                 return candidates[0]
 
-    # 2. Fallback direct YouTube avec cookies si disponibles
+    # 3. Direct YouTube avec cookies si dispo
     print("→ Fallback direct YouTube")
     if _ydl_download(url, out_path, cookies=True):
         candidates = list(out_dir.glob("source*.mp4"))
@@ -227,9 +304,9 @@ def download_video(url: str, out_dir: Path) -> Path:
             return candidates[0]
 
     raise RuntimeError(
-        "Impossible de télécharger la vidéo. "
-        "YouTube bloque les IP cloud. "
-        "Essaie une autre vidéo ou contacte le support."
+        "Toutes les méthodes ont échoué. "
+        "YouTube bloque ce téléchargement depuis le cloud. "
+        "Essaie une vidéo différente."
     )
 
 # ── Transcription ─────────────────────────────────────────────────────────
