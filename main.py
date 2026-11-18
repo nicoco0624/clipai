@@ -159,11 +159,26 @@ async def process_video(job_id: str, url: str, language: str):
 
 def download_video(url: str, out_dir: Path) -> Path:
     out_path = out_dir / "source.mp4"
+    # tv_embedded + android contournent la détection bot de YouTube sur serveur
     ydl_opts = {
-        "format":    "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]/best",
+        "format":    "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]/best",
         "outtmpl":   str(out_path),
         "quiet":     True,
         "merge_output_format": "mp4",
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["tv_embedded", "android"],
+                "player_skip":   ["webpage", "js"],
+            }
+        },
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Linux; Android 11; Pixel 5) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/90.0.4430.91 Mobile Safari/537.36"
+            )
+        },
+        "socket_timeout": 60,
         "postprocessors": [{
             "key":            "FFmpegVideoConvertor",
             "preferedformat": "mp4",
@@ -171,10 +186,9 @@ def download_video(url: str, out_dir: Path) -> Path:
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
-    # yt-dlp peut ajouter des suffixes
     candidates = list(out_dir.glob("source*.mp4"))
     if not candidates:
-        raise RuntimeError("Téléchargement échoué")
+        raise RuntimeError("Téléchargement échoué — YouTube a bloqué la requête")
     return candidates[0]
 
 # ── Transcription ─────────────────────────────────────────────────────────
